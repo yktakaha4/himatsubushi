@@ -6,7 +6,7 @@ import (
 )
 
 type DebugScene struct {
-	debugMessage string
+	message string
 }
 
 func (d *DebugScene) Update(state *State, input Input) error {
@@ -15,10 +15,10 @@ func (d *DebugScene) Update(state *State, input Input) error {
 	} else if input.right {
 		state.score += 1
 	}
-	d.debugMessage = fmt.Sprintf("x=%v\ny=%v\nleft=%v\nright=%v\nscore=%v", input.x, input.y, input.left, input.right, state.score)
+	d.message = fmt.Sprintf("x=%v\ny=%v\nleft=%v\nright=%v\nscore=%v", input.x, input.y, input.left, input.right, state.score)
 	return nil
 }
 
-func (d *DebugScene) Draw(screen *Screen, state State) {
-	ebitenutil.DebugPrint(screen, d.debugMessage)
+func (d *DebugScene) Draw(screen *Screen) {
+	ebitenutil.DebugPrint(screen, d.message)
 }

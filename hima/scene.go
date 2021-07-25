@@ -2,7 +2,7 @@ package hima
 
 type Scene interface {
 	Update(state *State, input Input) error
-	Draw(screen *Screen, state State)
+	Draw(screen *Screen)
 }
 
 type SceneManager struct {
@@ -17,6 +17,6 @@ func (s *SceneManager) Update(state *State, input Input) error {
 	return nil
 }
 
-func (s *SceneManager) Draw(screen *Screen, state State) {
-	s.current.Draw(screen, state)
+func (s *SceneManager) Draw(screen *Screen) {
+	s.current.Draw(screen)
 }

@@ -34,7 +34,7 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *Screen) {
-	g.sceneManager.Draw(screen, *g.state)
+	g.sceneManager.Draw(screen)
 }
 
 func (g *Game) Initialize() error {
