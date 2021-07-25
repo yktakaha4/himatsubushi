@@ -9,15 +9,9 @@ SHELL:=/bin/bash
 # all targets are phony
 .PHONY: $(shell egrep -o ^[a-zA-Z_-]+: $(MAKEFILE_LIST) | sed 's/://')
 
-clean: ## clean
-	rm -f ./himatsubushi
-
-build: clean ## build
-	go build -v -o himatsubushi
-
-serve: build ## serve
+serve: ## serve
 	xdg-open http://localhost:8080 >/dev/null
-	wasmserve ./himatsubushi
+	wasmserve .
 
 help: ## Print this help
 	echo 'Usage: make [target]'
