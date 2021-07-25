@@ -9,6 +9,9 @@ SHELL:=/bin/bash
 # all targets are phony
 .PHONY: $(shell egrep -o ^[a-zA-Z_-]+: $(MAKEFILE_LIST) | sed 's/://')
 
+fix: ## fix
+	go fmt ./...
+
 serve: ## serve
 	xdg-open http://localhost:8080 >/dev/null
 	wasmserve .
