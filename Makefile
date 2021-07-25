@@ -9,20 +9,15 @@ SHELL:=/bin/bash
 # all targets are phony
 .PHONY: $(shell egrep -o ^[a-zA-Z_-]+: $(MAKEFILE_LIST) | sed 's/://')
 
-taskA: ## executes task A
-	echo 'Starting $@'
-	sleep 1
-	echo 'Finished $@'
+clean: ## clean
+	rm -f ./himatsubushi
 
-taskB: ## executes task B
-	echo 'Starting $@'
-	sleep 1
-	echo 'Finished $@'
+build: clean ## build
+	go build -v -o himatsubushi
 
-taskC: taskB ## executes task C (depends task B)
-	echo 'Starting $@'
-	sleep 1
-	echo 'Finished $@'
+serve: build ## serve
+	xdg-open http://localhost:8080 >/dev/null
+	wasmserve ./himatsubushi
 
 help: ## Print this help
 	echo 'Usage: make [target]'
