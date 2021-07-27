@@ -9,6 +9,9 @@ SHELL:=/bin/bash
 # all targets are phony
 .PHONY: $(shell egrep -o ^[a-zA-Z_-]+: $(MAKEFILE_LIST) | sed 's/://')
 
+build: ## fix
+	go build -v -o ./himatsubushi
+
 fix: ## fix
 	go fmt ./...
 
