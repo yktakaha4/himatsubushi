@@ -1,18 +1,32 @@
 package hima
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 type Screen = ebiten.Image
 
 const (
-	ScreenWidth  = 256
-	ScreenHeight = 240
+	ScreenWidth  = 512
+	ScreenHeight = 512
 )
 
 type Game struct {
 	sceneManager *SceneManager
 	inputManager *InputManager
+	textManager  *TextManager
 	state        *State
+}
+
+type UpdateContext struct {
+	input        Input
+	state        *State
+	sceneManager *SceneManager
+}
+
+type DrawContext struct {
+	screen      *Screen
+	textManager *TextManager
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
@@ -25,7 +39,10 @@ func (g *Game) Update() error {
 		return err
 	}
 
-	err = g.sceneManager.Update(g.state, input)
+	err = g.sceneManager.Update(&UpdateContext{
+		state: g.state,
+		input: input,
+	})
 	if err != nil {
 		return err
 	}
@@ -34,15 +51,21 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *Screen) {
-	g.sceneManager.Draw(screen)
+	g.sceneManager.Draw(&DrawContext{
+		screen: screen,
+	})
 }
 
-func (g *Game) Initialize() error {
-	g.sceneManager = &SceneManager{
-		current: &DebugScene{},
-	}
-	g.inputManager = &InputManager{}
-	g.state = &State{}
+func CreateGame() *Game {
+	sceneManager := CreateSceneManager(&DebugScene{})
+	inputManager := CreateInputManager()
+	textManager := CreateTextManager()
+	state := CreateState()
 
-	return nil
+	return &Game{
+		sceneManager: sceneManager,
+		inputManager: inputManager,
+		textManager:  textManager,
+		state:        state,
+	}
 }

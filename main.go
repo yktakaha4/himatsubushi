@@ -11,12 +11,8 @@ func main() {
 	ebiten.SetWindowSize(640, 480)
 	ebiten.SetWindowTitle("Hello, World!")
 
-	game := hima.Game{}
-	if err := game.Initialize(); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := ebiten.RunGame(&game); err != nil {
+	game := hima.CreateGame()
+	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
 }

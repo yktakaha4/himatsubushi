@@ -24,3 +24,7 @@ func (i *InputManager) Read() (Input, error) {
 		right: right,
 	}, nil
 }
+
+func CreateInputManager() *InputManager {
+	return &InputManager{}
+}

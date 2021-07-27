@@ -1,22 +1,28 @@
 package hima
 
 type Scene interface {
-	Update(state *State, input Input) error
-	Draw(screen *Screen)
+	Update(c *UpdateContext) error
+	Draw(c *DrawContext)
 }
 
 type SceneManager struct {
 	current Scene
 }
 
-func (s *SceneManager) Update(state *State, input Input) error {
-	if err := s.current.Update(state, input); err != nil {
+func (s *SceneManager) Update(c *UpdateContext) error {
+	if err := s.current.Update(c); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *SceneManager) Draw(screen *Screen) {
-	s.current.Draw(screen)
+func (s *SceneManager) Draw(c *DrawContext) {
+	s.current.Draw(c)
+}
+
+func CreateSceneManager(initial Scene) *SceneManager {
+	return &SceneManager{
+		current: initial,
+	}
 }
