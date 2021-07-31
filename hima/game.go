@@ -52,7 +52,8 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *Screen) {
 	g.sceneManager.Draw(&DrawContext{
-		screen: screen,
+		screen:      screen,
+		textManager: g.textManager,
 	})
 }
 

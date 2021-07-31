@@ -2,9 +2,11 @@ package hima
 
 import (
 	"fmt"
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"image"
 	"image/color"
+	"log"
 	"math"
 )
 
@@ -47,5 +49,14 @@ func (d *DebugScene) Draw(c *DrawContext) {
 		point: d.point,
 		color: color.White,
 	})
+
+	image, err := c.textManager.CreateTextImage(&CreateTextImageOptions{
+		"ほげほげらんらんば\nABCDEFG\n\\{\"color\":{\"push\":true,\"b\":255,\"a\": 128},\"align\":{\"push\":true,\"right\":true}}\\ひあああ\nMO!\\{\"color\":{\"push\":true,\"g\":255,\"a\": 255}}\\緑の文字\n\\{\"align\":{\"push\":true,\"center\":true},\"color\":{\"pop\":true}}\\ほげほげもじ\n\\{\"reset\":true}\\リセット文字",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	c.screen.DrawImage(image, &ebiten.DrawImageOptions{})
+
 	ebitenutil.DebugPrint(c.screen, d.message)
 }
