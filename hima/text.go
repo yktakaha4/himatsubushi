@@ -38,6 +38,19 @@ type TextImage = ebiten.Image
 
 type CreateTextImageOptions struct {
 	Text string
+	Crop CreateTextImageCropOptions
+	Wrap CreateTextImageWrapOptions
+}
+
+type CreateTextImageCropOptions struct {
+	Enable bool
+	Size image.Point
+}
+
+type CreateTextImageWrapOptions struct {
+	Enable bool
+	Width int
+	AutoAdjustHeight bool
 }
 
 type TextDirective struct {
@@ -118,6 +131,9 @@ func (t *TextManager) Draw(screen *Screen, options *TextDrawOptions) {
 }
 
 func (t *TextManager) CreateTextImage(options *CreateTextImageOptions) (*TextImage, error) {
+	const LineSep = "\n"
+	const DirectiveSep = "\\"
+
 	// 指示の初期化とデフォルト設定
 	faces := make([]*TextDirectiveFont, 0)
 	colors := make([]*TextDirectiveColor, 0)
@@ -133,20 +149,60 @@ func (t *TextManager) CreateTextImage(options *CreateTextImageOptions) (*TextIma
 	align := aligns[len(aligns)-1]
 
 	// 指示を除いた文字全体のサイズから画像を生成
-	rectangle := text.BoundString(*face, RegexpDirective.ReplaceAllString(options.Text, ""))
-	image := ebiten.NewImage(rectangle.Dx(), rectangle.Dy())
+	textWithoutDirective := RegexpDirective.ReplaceAllString(options.Text, "")
+	rectangle := text.BoundString(*face, textWithoutDirective)
+
+	var imageX int
+	var imageY int
+
+	if options.Crop.Enable {
+		if options.Wrap.Enable {
+			wrapX := int(math.Min(math.Max(float64(options.Wrap.Width), float64(options.Crop.Size.X)), float64(rectangle.Dx())))
+
+			wrappedLines := make([]string, 0)
+			carryOver := ""
+			for _, unwrappedLine := range strings.Split(textWithoutDirective, LineSep) {
+				line := carryOver + unwrappedLine
+				carryOver = ""
+				for text.BoundString(*face, line).Dx() > wrapX {
+					lastCharIndex := len(line) - 1
+					carryOver += line[lastCharIndex:]
+					line = line[:lastCharIndex]
+				}
+				wrappedLines = append(wrappedLines, line)
+			}
+			if len(carryOver) > 0 {
+				wrappedLines = append(wrappedLines, carryOver)
+			}
+
+			wrappedRectangle := text.BoundString(*face, strings.Join(wrappedLines, LineSep))
+
+			imageX = wrappedRectangle.Dx()
+			imageY = wrappedRectangle.Dy()
+		} else {
+			imageX = options.Crop.Size.X
+			imageY = options.Crop.Size.Y
+		}
+	} else {
+		imageX = rectangle.Dx()
+		imageY = rectangle.Dy()
+	}
+
+	image := ebiten.NewImage(imageX, imageY)
+
 
 	y := 0
-	for _, line := range strings.Split(options.Text, "\n") {
+	for _, line := range strings.Split(options.Text, LineSep) {
 		// 行ごとの指示を除いた文字全体のサイズ
-		lineRectangle := text.BoundString(*face, RegexpDirective.ReplaceAllString(line, ""))
+		lineWithoutDirective := RegexpDirective.ReplaceAllString(line, "")
+		lineRectangle := text.BoundString(*face, lineWithoutDirective)
 		y += lineRectangle.Dy()
 
 		isDirective := true
 
 		x := 0
-		var xOffset int
-		for _, part := range strings.Split(line, "\\") {
+		var xAlignOffset int
+		for _, part := range strings.Split(line, DirectiveSep) {
 			// \{"xxx": "yyy"}\ 形式の入力があった時に、以降の文字に対する指示として扱われる
 			isDirective = !isDirective
 			if isDirective {
@@ -195,14 +251,14 @@ func (t *TextManager) CreateTextImage(options *CreateTextImageOptions) (*TextIma
 				partRectangle := text.BoundString(*face, part)
 
 				if align.Left {
-					xOffset = 0
+					xAlignOffset = 0
 				} else if align.Center {
-					xOffset = int(math.Ceil(float64(rectangle.Dx()-lineRectangle.Dx()) * 0.5))
+					xAlignOffset = int(math.Floor(float64(imageX-lineRectangle.Dx()) * 0.5))
 				} else if align.Right {
-					xOffset = rectangle.Dx() - lineRectangle.Dx()
+					xAlignOffset = imageX - lineRectangle.Dx()
 				}
 
-				text.Draw(image, part, *face, x+xOffset, y, color)
+				text.Draw(image, part, *face, x+xAlignOffset, y, color)
 
 				x += partRectangle.Dx()
 			}
