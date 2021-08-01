@@ -51,8 +51,19 @@ func (d *DebugScene) Draw(c *DrawContext) {
 	})
 
 	image, err := c.textManager.CreateTextImage(&CreateTextImageOptions{
-		Text: "ほげほげらんらんば\nABCDEFG\n\\{\"color\":{\"push\":true,\"b\":255,\"a\": 128},\"align\":{\"push\":true,\"right\":true}}\\ひあああ\nMO!\\{\"color\":{\"push\":true,\"g\":255,\"a\": 255}}\\緑の文字\n\\{\"align\":{\"push\":true,\"center\":true},\"color\":{\"pop\":true}}\\ほげほげもじ\n\\{\"reset\":true}\\リセット文字",
-		
+		//Text: "ほげほげらんらんば\nABCDEFG\n\\{\"color\":{\"push\":true,\"b\":255,\"a\": 128},\"align\":{\"push\":true,\"right\":true}}\\ひあああ\n\\{\"color\":{\"push\":true,\"g\":255,\"a\": 255}}\\緑の文字\n\\{\"align\":{\"push\":true,\"center\":true},\"color\":{\"pop\":true}}\\ほげほげもじ\n\\{\"reset\":true}\\リセット文字",
+		Text: "吾輩は\\{\"color\":{\"push\":true,\"g\":255,\"a\": 255}}\\猫\\{\"reset\":true}\\である。名前はまだない。\nどこで生れたか頓（とん）と見当がつかぬ。何でも\n\\{\"color\":{\"push\":true, \"name\": \"black\"},\"align\":{\"push\":true, \"center\":true}}\\薄暗い\\{\"reset\":true}\\じめじめした所でニャーニャー泣いていた事だけは記憶している。",
+
+		Crop: CreateTextImageCropOptions{
+			Enable: true,
+			Size: image.Point{
+				X: 300,
+			},
+		},
+		Wrap: CreateTextImageWrapOptions{
+			Enable: true,
+			Width:  400,
+		},
 	})
 	if err != nil {
 		log.Fatal(err)

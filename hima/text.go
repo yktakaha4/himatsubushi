@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
+	"golang.org/x/exp/utf8string"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"image"
 	"image/color"
 	"log"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 //go:embed fonts/SourceHanSerif-Regular.otf
@@ -44,13 +47,12 @@ type CreateTextImageOptions struct {
 
 type CreateTextImageCropOptions struct {
 	Enable bool
-	Size image.Point
+	Size   image.Point
 }
 
 type CreateTextImageWrapOptions struct {
 	Enable bool
-	Width int
-	AutoAdjustHeight bool
+	Width  int
 }
 
 type TextDirective struct {
@@ -67,18 +69,29 @@ type TextDirectiveColor struct {
 	Push  bool `json:"push"`
 	Pop   bool `json:"pop"`
 
-	R uint8 `json:"r"`
-	G uint8 `json:"g"`
-	B uint8 `json:"b"`
-	A uint8 `json:"a"`
+	R    uint8  `json:"r"`
+	G    uint8  `json:"g"`
+	B    uint8  `json:"b"`
+	A    uint8  `json:"a"`
+	Name string `json:"name"`
 }
 
 func (t *TextDirectiveColor) GetColor() *color.RGBA {
-	return &color.RGBA{
-		R: t.R,
-		G: t.G,
-		B: t.B,
-		A: t.A,
+	switch t.Name {
+	case "black":
+		return &color.RGBA{
+			R: 0,
+			G: 0,
+			B: 0,
+			A: 255,
+		}
+	default:
+		return &color.RGBA{
+			R: t.R,
+			G: t.G,
+			B: t.B,
+			A: t.A,
+		}
 	}
 }
 
@@ -116,6 +129,11 @@ func (f *FontFace) GetFace() font.Face {
 	}
 }
 
+func (f *FontFace) GetLineHeight() int {
+	face := f.GetFace()
+	return text.BoundString(face, "aAあ!").Dy()
+}
+
 const (
 	Normal FontFace = iota
 )
@@ -133,6 +151,12 @@ func (t *TextManager) Draw(screen *Screen, options *TextDrawOptions) {
 func (t *TextManager) CreateTextImage(options *CreateTextImageOptions) (*TextImage, error) {
 	const LineSep = "\n"
 	const DirectiveSep = "\\"
+
+	type Element struct {
+		Text      string
+		Directive TextDirective
+		LineBreak bool
+	}
 
 	// 指示の初期化とデフォルト設定
 	faces := make([]*TextDirectiveFont, 0)
@@ -152,116 +176,170 @@ func (t *TextManager) CreateTextImage(options *CreateTextImageOptions) (*TextIma
 	textWithoutDirective := RegexpDirective.ReplaceAllString(options.Text, "")
 	rectangle := text.BoundString(*face, textWithoutDirective)
 
-	var imageX int
-	var imageY int
+	imageX := rectangle.Dx()
+	imageY := rectangle.Dy()
 
-	if options.Crop.Enable {
-		if options.Wrap.Enable {
-			wrapX := int(math.Min(math.Max(float64(options.Wrap.Width), float64(options.Crop.Size.X)), float64(rectangle.Dx())))
+	if options.Wrap.Enable {
+		wrapX := int(math.Min(math.Max(float64(options.Wrap.Width), float64(options.Crop.Size.X)), float64(rectangle.Dx())))
 
-			wrappedLines := make([]string, 0)
-			carryOver := ""
-			for _, unwrappedLine := range strings.Split(textWithoutDirective, LineSep) {
-				line := carryOver + unwrappedLine
+		wrappedLines := make([]string, 0)
+		for _, unwrappedLine := range strings.Split(textWithoutDirective, LineSep) {
+			carryOver := unwrappedLine
+			for utf8.RuneCountInString(carryOver) > 0 {
+				line := carryOver
 				carryOver = ""
 				for text.BoundString(*face, line).Dx() > wrapX {
-					lastCharIndex := len(line) - 1
-					carryOver += line[lastCharIndex:]
-					line = line[:lastCharIndex]
+					uLine := utf8string.NewString(line)
+					carryOver = uLine.Slice(uLine.RuneCount()-1, uLine.RuneCount()) + carryOver
+					line = uLine.Slice(0, uLine.RuneCount()-1)
 				}
 				wrappedLines = append(wrappedLines, line)
 			}
-			if len(carryOver) > 0 {
-				wrappedLines = append(wrappedLines, carryOver)
-			}
+		}
 
-			wrappedRectangle := text.BoundString(*face, strings.Join(wrappedLines, LineSep))
+		wrappedRectangle := text.BoundString(*face, strings.Join(wrappedLines, LineSep))
 
-			imageX = wrappedRectangle.Dx()
-			imageY = wrappedRectangle.Dy()
-		} else {
+		imageX = wrappedRectangle.Dx()
+		imageY = wrappedRectangle.Dy()
+	}
+
+	if options.Crop.Enable {
+		if options.Crop.Size.X > 0 {
 			imageX = options.Crop.Size.X
+		}
+		if options.Crop.Size.Y > 0 {
 			imageY = options.Crop.Size.Y
 		}
-	} else {
-		imageX = rectangle.Dx()
-		imageY = rectangle.Dy()
 	}
 
 	image := ebiten.NewImage(imageX, imageY)
 
-
-	y := 0
-	for _, line := range strings.Split(options.Text, LineSep) {
-		// 行ごとの指示を除いた文字全体のサイズ
-		lineWithoutDirective := RegexpDirective.ReplaceAllString(line, "")
-		lineRectangle := text.BoundString(*face, lineWithoutDirective)
-		y += lineRectangle.Dy()
+	// 入力文字を要素にパース
+	elements := make([]*Element, 0)
+	for index, line := range strings.Split(options.Text, LineSep) {
+		if index > 0 {
+			elements = append(elements, &Element{
+				LineBreak: true,
+			})
+		}
 
 		isDirective := true
-
-		x := 0
-		var xAlignOffset int
-		for _, part := range strings.Split(line, DirectiveSep) {
-			// \{"xxx": "yyy"}\ 形式の入力があった時に、以降の文字に対する指示として扱われる
-			isDirective = !isDirective
-			if isDirective {
+		for _, element := range strings.Split(line, DirectiveSep) {
+			if isDirective = !isDirective; isDirective {
 				textDirective := TextDirective{}
-				if err := json.Unmarshal([]byte(part), &textDirective); err != nil {
+				if err := json.Unmarshal([]byte(element), &textDirective); err != nil {
 					return nil, err
 				}
 
-				// フォント指示のクリア/追加/削除
-				if textDirective.Font.Reset || textDirective.Reset {
-					faces = faces[:1]
-					face = faces[len(faces)-1].GetFace()
-				} else if textDirective.Font.Push {
-					faces = append(faces, &textDirective.Font)
-					face = faces[len(faces)-1].GetFace()
-				} else if (textDirective.Font.Pop || textDirective.Pop) && len(faces) > 1 {
-					faces = faces[:len(faces)-1]
-					face = faces[len(faces)-1].GetFace()
-				}
-
-				// 色指示のクリア/追加/削除
-				if textDirective.Color.Reset || textDirective.Reset {
-					colors = colors[:1]
-					color = colors[len(colors)-1].GetColor()
-				} else if textDirective.Color.Push {
-					colors = append(colors, &textDirective.Color)
-					color = colors[len(colors)-1].GetColor()
-				} else if (textDirective.Color.Pop || textDirective.Pop) && len(colors) > 1 {
-					colors = colors[:len(colors)-1]
-					color = colors[len(colors)-1].GetColor()
-				}
-
-				// 配置指示のクリア/追加/削除
-				if textDirective.Align.Reset || textDirective.Reset {
-					aligns = aligns[:1]
-					align = aligns[len(aligns)-1]
-				} else if textDirective.Align.Push {
-					aligns = append(aligns, &textDirective.Align)
-					align = aligns[len(aligns)-1]
-				} else if (textDirective.Align.Pop || textDirective.Pop) && len(aligns) > 1 {
-					aligns = aligns[:len(aligns)-1]
-					align = aligns[len(aligns)-1]
-				}
+				elements = append(elements, &Element{
+					Directive: textDirective,
+				})
 			} else {
-				// 指示でない場合は文字として描画する
-				partRectangle := text.BoundString(*face, part)
-
-				if align.Left {
-					xAlignOffset = 0
-				} else if align.Center {
-					xAlignOffset = int(math.Floor(float64(imageX-lineRectangle.Dx()) * 0.5))
-				} else if align.Right {
-					xAlignOffset = imageX - lineRectangle.Dx()
-				}
-
-				text.Draw(image, part, *face, x+xAlignOffset, y, color)
-
-				x += partRectangle.Dx()
+				elements = append(elements, &Element{
+					Text: element,
+				})
 			}
+		}
+	}
+
+	x := 0
+	y := 0
+	lineHeight := 0
+	for len(elements) > 0 {
+		// 要素がなくなるまでUnshiftしながら画面描画
+		element := elements[0]
+		elements = elements[1:]
+
+		// 描画指示の設定
+		directive := element.Directive
+
+		// フォント指示のクリア/追加/削除
+		if directive.Font.Reset || directive.Reset {
+			faces = faces[:1]
+			face = faces[len(faces)-1].GetFace()
+		} else if directive.Font.Push {
+			faces = append(faces, &directive.Font)
+			face = faces[len(faces)-1].GetFace()
+		} else if (directive.Font.Pop || directive.Pop) && len(faces) > 1 {
+			faces = faces[:len(faces)-1]
+			face = faces[len(faces)-1].GetFace()
+		}
+
+		// 色指示のクリア/追加/削除
+		if directive.Color.Reset || directive.Reset {
+			colors = colors[:1]
+			color = colors[len(colors)-1].GetColor()
+		} else if directive.Color.Push {
+			colors = append(colors, &directive.Color)
+			color = colors[len(colors)-1].GetColor()
+		} else if (directive.Color.Pop || directive.Pop) && len(colors) > 1 {
+			colors = colors[:len(colors)-1]
+			color = colors[len(colors)-1].GetColor()
+		}
+
+		// 配置指示のクリア/追加/削除
+		previousAlign := aligns[len(aligns)-1]
+		if directive.Align.Reset || directive.Reset {
+			aligns = aligns[:1]
+			align = aligns[len(aligns)-1]
+		} else if directive.Align.Push {
+			aligns = append(aligns, &directive.Align)
+			align = aligns[len(aligns)-1]
+		} else if (directive.Align.Pop || directive.Pop) && len(aligns) > 1 {
+			aligns = aligns[:len(aligns)-1]
+			align = aligns[len(aligns)-1]
+		}
+		if !reflect.DeepEqual(previousAlign, align) {
+			// 配列指示を変更した場合には強制的に改行
+			elements = append([]*Element{{
+				LineBreak: true,
+			}}, elements...)
+		}
+
+		// 描画行に対して収める文字を確定
+		lineText := element.Text
+		carryOver := ""
+		xRemaining := int(float64(imageX - x))
+		for options.Wrap.Enable && utf8.RuneCountInString(lineText) > 0 && text.BoundString(*face, lineText).Dx() > xRemaining {
+			uLine := utf8string.NewString(lineText)
+			carryOver = uLine.Slice(uLine.RuneCount()-1, uLine.RuneCount()) + carryOver
+			lineText = uLine.Slice(0, uLine.RuneCount()-1)
+		}
+
+		// 文字の描画
+		lineRectangle := text.BoundString(*face, lineText)
+		lineHeight = int(math.Max(float64(lineHeight), float64(lineRectangle.Dy())))
+		if utf8.RuneCountInString(lineText) > 0 {
+			// 存在する場合描画
+			var xAlignOffset int
+			if align.Left {
+				xAlignOffset = 0
+			} else if align.Center {
+				xAlignOffset = int(math.Floor(float64(xRemaining-lineRectangle.Dx()) * 0.5))
+			} else if align.Right {
+				xAlignOffset = xRemaining - lineRectangle.Dx()
+			}
+
+			text.Draw(image, lineText, *face, x+xAlignOffset, y+lineHeight, color)
+			x += lineRectangle.Dx()
+
+		}
+
+		lineBreak := element.LineBreak
+		// 改行の描画
+		if lineBreak {
+			y += lineHeight
+			x = 0
+			lineHeight = 0
+		}
+
+		// 積み残した文字がある場合は要素の先頭に詰める
+		if utf8.RuneCountInString(carryOver) > 0 {
+			elements = append([]*Element{{
+				LineBreak: true,
+			}, {
+				Text: carryOver,
+			}}, elements...)
 		}
 	}
 
